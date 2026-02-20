@@ -1,0 +1,287 @@
+{
+  "name": "Test Simple Webhook Workflow",
+  "nodes": [
+    {
+      "id": "webhook-trigger-001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300],
+      "webhookId": "test-webhook-001",
+      "parameters": {
+        "path": "test-webhook",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "validate-input-001",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300],
+      "parameters": {
+        "jsCode": "// Input validation layer\nconst input = $input.first().json.body || {};\n\n// Validation rules\nconst required = ['name', 'action'];\nconst missing = required.filter(field => !input[field]);\n\nif (missing.length > 0) {\n  return {\n    json: {\n      valid: false,\n      error: `Missing required fields: ${missing.join(', ')}`,\n      input: input\n    }\n  };\n}\n\n// Sanitize and structure\nconst sanitized = {\n  name: String(input.name).trim().substring(0, 100),\n  action: ['create', 'update', 'delete'].includes(input.action) ? input.action : 'unknown',\n  metadata: input.metadata || {},\n  timestamp: new Date().toISOString()\n};\n\nreturn {\n  json: {\n    valid: true,\n    data: sanitized,\n    correlationId: $input.first().json.headers?.['x-correlation-id'] || Math.random().toString(36).substring(7)\n  }\n};"
+      }
+    },
+    {
+      "id": "switch-router-001",
+      "name": "Action Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [750, 300],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "output": 0,
+              "conditions": {
+                "conditions": [
+                  {
+                    "value1": "={{ $json.data.action }}",
+                    "operation": "equals",
+                    "value2": "create"
+                  }
+                ]
+              }
+            },
+            {
+              "output": 1,
+              "conditions": {
+                "conditions": [
+                  {
+                    "value1": "={{ $json.data.action }}",
+                    "operation": "equals",
+                    "value2": "update"
+                  }
+                ]
+              }
+            },
+            {
+              "output": 2,
+              "conditions": {
+                "conditions": [
+                  {
+                    "value1": "={{ $json.data.action }}",
+                    "operation": "equals",
+                    "value2": "delete"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "fallbackOutput": 3
+      }
+    },
+    {
+      "id": "create-service-001",
+      "name": "Create Service",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 150],
+      "parameters": {
+        "jsCode": "// Business logic: Create operation\nconst input = $input.first().json;\nconst correlationId = input.correlationId;\nconst data = input.data;\n\n// Simulate service layer\nconst result = {\n  id: Math.random().toString(36).substring(7),\n  name: data.name,\n  action: 'create',\n  status: 'created',\n  createdAt: new Date().toISOString(),\n  correlationId: correlationId\n};\n\n// Return structured response\nreturn {\n  json: {\n    success: true,\n    operation: 'create',\n    result: result,\n    correlationId: correlationId\n  }\n};"
+      }
+    },
+    {
+      "id": "update-service-001",
+      "name": "Update Service",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 300],
+      "parameters": {
+        "jsCode": "// Business logic: Update operation\nconst input = $input.first().json;\nconst correlationId = input.correlationId;\nconst data = input.data;\n\n// Simulate service layer\nconst result = {\n  id: data.metadata?.id || 'unknown',\n  name: data.name,\n  action: 'update',\n  status: 'updated',\n  updatedAt: new Date().toISOString(),\n  correlationId: correlationId\n};\n\nreturn {\n  json: {\n    success: true,\n    operation: 'update',\n    result: result,\n    correlationId: correlationId\n  }\n};"
+      }
+    },
+    {
+      "id": "delete-service-001",
+      "name": "Delete Service",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 450],
+      "parameters": {
+        "jsCode": "// Business logic: Delete operation\nconst input = $input.first().json;\nconst correlationId = input.correlationId;\nconst data = input.data;\n\n// Simulate service layer\nconst result = {\n  id: data.metadata?.id || 'unknown',\n  name: data.name,\n  action: 'delete',\n  status: 'deleted',\n  deletedAt: new Date().toISOString(),\n  correlationId: correlationId\n};\n\nreturn {\n  json: {\n    success: true,\n    operation: 'delete',\n    result: result,\n    correlationId: correlationId\n  }\n};"
+      }
+    },
+    {
+      "id": "error-service-001",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 600],
+      "parameters": {
+        "jsCode": "// Business logic: Unknown action\nconst input = $input.first().json;\n\nreturn {\n  json: {\n    success: false,\n    operation: 'unknown',\n    error: `Unknown action: ${input.data?.action}`,\n    correlationId: input.correlationId,\n    supportedActions: ['create', 'update', 'delete']\n  }\n};"
+      }
+    },
+    {
+      "id": "validation-error-001",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [750, 500],
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={{ { success: false, error: $json.error, stage: 'validation' } }}"
+      }
+    },
+    {
+      "id": "success-response-001",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1250, 300],
+      "parameters": {
+        "options": {},
+        "respondWith": "json",
+        "responseBody": "={{ { success: true, data: $json.result, correlationId: $json.correlationId } }}"
+      }
+    },
+    {
+      "id": "log-operation-001",
+      "name": "Log Operation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 300],
+      "parameters": {
+        "jsCode": "// Logging layer\nconst result = $input.first().json;\n\n// Structured logging\nconst logEntry = {\n  timestamp: new Date().toISOString(),\n  level: result.success ? 'info' : 'error',\n  correlationId: result.correlationId,\n  operation: result.operation,\n  success: result.success,\n  error: result.error || null\n};\n\nconsole.log('[LOG]', JSON.stringify(logEntry));\n\nreturn { json: logEntry };"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Action Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [
+          {
+            "node": "Create Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete Service",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Service": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Service": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Service": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Success Response": {
+      "main": [
+        [
+          {
+            "node": "Log Operation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveExecutionProgress": true,
+    "saveManualExecutions": true
+  },
+  "tags": [
+    {
+      "name": "test",
+      "createdAt": "2026-02-20T00:00:00.000Z"
+    },
+    {
+      "name": "example",
+      "createdAt": "2026-02-20T00:00:00.000Z"
+    },
+    {
+      "name": "structured",
+      "createdAt": "2026-02-20T00:00:00.000Z"
+    }
+  ],
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "test-workflow-example"
+  }
+}

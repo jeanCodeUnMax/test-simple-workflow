@@ -1,0 +1,10 @@
+{
+  "name": "test-simple-workflow",
+  "version": "1.0.0",
+  "description": "Simple n8n workflow with strict architecture",
+  "scripts": {
+    "validate": "node ../scripts/validate-structure.js ."
+  },
+  "keywords": ["n8n", "workflow", "test"],
+  "license": "MIT"
+}
